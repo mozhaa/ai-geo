@@ -1,0 +1,7 @@
+*.json
+*.jpg
+
+__pycache__
+*.pyc
+
+*.ipynb
