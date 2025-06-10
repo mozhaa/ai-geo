@@ -10,7 +10,7 @@ import orjson
 from tqdm import tqdm
 
 from panotools.googleapi import get_metadata, get_pano, single_image_search
-from panotools.utils import get_first, limited_gather
+from panotools.utils import get_first
 
 
 def parse_args() -> argparse.Namespace:
@@ -18,12 +18,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("input", type=str, help="input JSON with locations")
     parser.add_argument("-d", "--directory", type=str, default="panoramas", help="panoramas directory name")
     parser.add_argument("-z", "--zoom", type=int, choices=[0, 1, 2, 3, 4, 5, 6], default=3, help="panorama zoom level")
-    parser.add_argument("--coro-limit", type=int, default=128, help="max number of coroutines for locations")
+    parser.add_argument("--batch-size", type=int, default=8, help="max number of simultaneously processed locations")
     parser.add_argument("--conn-limit", type=int, default=64, help="max number of simultaneous TCP connections")
     parser.add_argument(
         "--conn-limit-per-host",
         type=int,
-        default=16,
+        default=0,
         help="max number of simultaneous TCP connections per host",
     )
     parser.add_argument("-o", "--output", type=str, required=True, help="output JSON file")
@@ -31,9 +31,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def process_location(
-    location: Any, images_dir: Path, zoom: int, session: aiohttp.ClientSession, pbar: tqdm
-) -> bool:
+async def process_location(location: Any, images_dir: Path, zoom: int, session: aiohttp.ClientSession) -> bool:
     try:
         # load location metadata
         if "metadata" not in location:
@@ -70,8 +68,6 @@ async def process_location(
     except Exception:
         tqdm.write(f"[warning]: skipped location due to error: {traceback.format_exc()}")
         return False
-    finally:
-        pbar.update(1)
 
 
 async def main(args: argparse.Namespace) -> None:
@@ -79,27 +75,28 @@ async def main(args: argparse.Namespace) -> None:
     images_dir.mkdir(parents=True, exist_ok=True)
 
     with open(args.input, "r", encoding="utf-8") as f:
-        data = orjson.loads(f.read())
-    if not isinstance(data, list):
-        if "customCoordinates" not in data:
+        locations = orjson.loads(f.read())
+    if not isinstance(locations, list):
+        if "customCoordinates" not in locations:
             raise ValueError("unknown format of JSON file")
-        locations = data["customCoordinates"]
-    else:
-        locations = data
+        locations = locations["customCoordinates"]
 
-    async with aiohttp.ClientSession(
-        connector=aiohttp.TCPConnector(limit=args.conn_limit, limit_per_host=args.conn_limit_per_host)
-    ) as session:
-        with tqdm(total=len(locations)) as pbar:
-            locations_selectors = await limited_gather(
-                [process_location(location, images_dir, args.zoom, session, pbar) for location in locations],
-                args.coro_limit,
-            )
-
-    locations = itertools.compress(locations, locations_selectors)
-
-    with open(args.output, "wb") as f:
-        f.write(orjson.dumps(data))
+    selectors = [True for _ in locations]
+    try:
+        async with aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(limit=args.conn_limit, limit_per_host=args.conn_limit_per_host)
+        ) as session:
+            batches = itertools.batched(locations, args.batch_size)
+            for i, loc_batch in enumerate(tqdm(batches, total=len(locations) // args.batch_size)):
+                tasks = [process_location(loc, images_dir, args.zoom, session) for loc in loc_batch]
+                from_, to_ = i * args.batch_size, (i + 1) * args.batch_size
+                selectors[from_:to_] = await asyncio.gather(*tasks)
+    except (KeyboardInterrupt, asyncio.exceptions.CancelledError):
+        tqdm.write("interrupted, saving to JSON...")
+    finally:
+        locations = list(itertools.compress(locations, selectors))
+        with open(args.output, "wb") as f:
+            f.write(orjson.dumps({"customCoordinates": locations}))
 
 
 if __name__ == "__main__":
