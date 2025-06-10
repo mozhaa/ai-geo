@@ -16,7 +16,8 @@ from panotools.utils import get_first
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("input", type=str, help="input JSON with locations")
-    parser.add_argument("-d", "--directory", type=str, default="panoramas", help="panoramas directory name")
+    parser.add_argument("-d", "--directory", type=str, default=".", help="root dir for JSON and images dir")
+    parser.add_argument("--images-dir", type=str, default="panoramas", help="name of images dir inside root dir")
     parser.add_argument("-z", "--zoom", type=int, choices=[0, 1, 2, 3, 4, 5, 6], default=3, help="panorama zoom level")
     parser.add_argument("--batch-size", type=int, default=8, help="max number of simultaneously processed locations")
     parser.add_argument("--conn-limit", type=int, default=64, help="max number of simultaneous TCP connections")
@@ -26,12 +27,14 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="max number of simultaneous TCP connections per host",
     )
-    parser.add_argument("-o", "--output", type=str, required=True, help="output JSON file")
+    parser.add_argument("-o", "--output", type=str, required=True, help="output JSON file name (relative to root dir)")
     parser.epilog = "every location must have either panoid or lat+lng for obtaining panoid"
     return parser.parse_args()
 
 
-async def process_location(location: Any, images_dir: Path, zoom: int, session: aiohttp.ClientSession) -> bool:
+async def process_location(
+    location: Any, root_dir: Path, images_dir: str, zoom: int, session: aiohttp.ClientSession
+) -> bool:
     try:
         # load location metadata
         if "metadata" not in location:
@@ -49,9 +52,10 @@ async def process_location(location: Any, images_dir: Path, zoom: int, session: 
 
         # load panorama
         panoid = location["metadata"]["panoid"]
-        path = images_dir / panoid[0] / panoid[1] / f"{panoid}.jpg"
-        if "panorama" not in location or not Path(images_dir / location["panorama"]).exists():
-            if not path.exists():
+        rel_path = Path(images_dir) / panoid[0] / panoid[1] / f"{panoid}.jpg"
+        abs_path = root_dir / rel_path
+        if "panorama" not in location or not (root_dir / images_dir / location["panorama"]).exists():
+            if not abs_path.exists():
                 pano = await get_pano(
                     session,
                     location["metadata"]["panoid"],
@@ -59,10 +63,10 @@ async def process_location(location: Any, images_dir: Path, zoom: int, session: 
                     location["metadata"]["tile_size"],
                     zoom,
                 )
-                path.parent.mkdir(parents=True, exist_ok=True)
-                pano.save(path)
+                abs_path.parent.mkdir(parents=True, exist_ok=True)
+                pano.save(abs_path)
 
-            location["panorama"] = str(path)
+            location["panorama"] = str(rel_path)
 
         return True
     except Exception:
@@ -71,8 +75,9 @@ async def process_location(location: Any, images_dir: Path, zoom: int, session: 
 
 
 async def main(args: argparse.Namespace) -> None:
-    images_dir = Path(args.directory)
-    images_dir.mkdir(parents=True, exist_ok=True)
+    root_dir = Path(args.directory)
+    root_dir.mkdir(parents=True, exist_ok=True)
+    output = root_dir / args.output
 
     with open(args.input, "r", encoding="utf-8") as f:
         locations = orjson.loads(f.read())
@@ -88,14 +93,14 @@ async def main(args: argparse.Namespace) -> None:
         ) as session:
             batches = itertools.batched(locations, args.batch_size)
             for i, loc_batch in enumerate(tqdm(batches, total=len(locations) // args.batch_size)):
-                tasks = [process_location(loc, images_dir, args.zoom, session) for loc in loc_batch]
+                tasks = [process_location(loc, root_dir, args.images_dir, args.zoom, session) for loc in loc_batch]
                 from_, to_ = i * args.batch_size, (i + 1) * args.batch_size
                 selectors[from_:to_] = await asyncio.gather(*tasks)
     except (KeyboardInterrupt, asyncio.exceptions.CancelledError):
         tqdm.write("interrupted, saving to JSON...")
     finally:
         locations = list(itertools.compress(locations, selectors))
-        with open(args.output, "wb") as f:
+        with output.open("wb") as f:
             f.write(orjson.dumps({"customCoordinates": locations}))
 
 
