@@ -9,8 +9,8 @@ import aiohttp
 import orjson
 from tqdm import tqdm
 
-from panotools.googleapi import get_metadata, get_pano, single_image_search
-from panotools.utils import get_first
+from gpano.google import get_metadata, get_pano, single_image_search
+from gpano.utils import get_first
 
 
 def parse_args() -> argparse.Namespace:
@@ -74,7 +74,7 @@ async def process_location(
         return False
 
 
-async def main(args: argparse.Namespace) -> None:
+async def load_panoramas(args: argparse.Namespace) -> None:
     root_dir = Path(args.directory)
     root_dir.mkdir(parents=True, exist_ok=True)
     output = root_dir / args.output
@@ -104,5 +104,9 @@ async def main(args: argparse.Namespace) -> None:
             f.write(orjson.dumps({"customCoordinates": locations}))
 
 
+def main() -> None:
+    asyncio.run(load_panoramas(parse_args()))
+
+
 if __name__ == "__main__":
-    asyncio.run(main(parse_args()))
+    main()

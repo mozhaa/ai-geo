@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gpano"
+version = "1.0"
+requires-python = ">= 3.12"
+description = "CLI tools for downloading Google Street View panoramas"
+readme = "README.md"
+dependencies = [
+    "aiohttp",
+    "orjson",
+    "tqdm",
+    "pillow",
+    "numpy",
+]
+
+[project.optional-dependencies]
+sampling = [
+  "torch==2.6.0",
+  "torchvision==0.21.0",
+]
+
+[project.scripts]
+gpano-load = "gpano.cli.load:main"
+gpano-sample = "gpano.cli.sample:main"
+
+[tool.hatch.metadata]
+allow-direct-references = true
