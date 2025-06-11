@@ -1,12 +1,13 @@
 from typing import *
 
+import numpy as np
 import torch
 from torch.nn import functional as F
 
 
 class PanoConverter:
     def __init__(
-        self, size: int, phi: float, theta: float, fov: float = torch.pi / 2, batch_size: int = 1, device: Any = "cpu"
+        self, size: int, phi: float, theta: float, fov: float = np.pi / 2, batch_size: int = 1, device: Any = "cpu"
     ) -> None:
         self.size = size
         self.phi = phi
@@ -19,35 +20,31 @@ class PanoConverter:
         self._prepare_base_mapping()
 
     def _calculate_support_vectors(self) -> None:
-        self.v = torch.tensor(
-            [
-                torch.cos(self.phi) * torch.cos(self.theta),
-                torch.sin(self.phi) * torch.cos(self.theta),
-                -torch.sin(self.theta),
-            ]
+        self.v = np.array(
+            [np.cos(self.phi) * np.cos(self.theta), np.sin(self.phi) * np.cos(self.theta), -np.sin(self.theta)]
         )
-        s = torch.tan(self.fov / 2)
+        s = np.tan(self.fov / 2)
 
-        up = torch.tensor([0, 0, 1])
-        if torch.allclose(self.v, up):
-            up = torch.tensor([1, 0, 0])
+        up = np.array([0, 0, 1])
+        if np.allclose(self.v, up):
+            up = np.array([1, 0, 0])
 
-        self.dj = -torch.cross(self.v, up)
-        self.di = torch.cross(self.v, self.dj)
+        self.dj = -np.cross(self.v, up)
+        self.di = np.cross(self.v, self.dj)
 
-        self.dj *= s / torch.linalg.norm(self.dj)
-        self.di *= s / torch.linalg.norm(self.di)
+        self.dj *= s / np.linalg.norm(self.dj)
+        self.di *= s / np.linalg.norm(self.di)
 
-    def _cube_to_3d(self, i: float, j: float) -> torch.ndarray:
+    def _cube_to_3d(self, i: float, j: float) -> np.ndarray:
         return self.v + self.di * (2 * i - 1) + self.dj * (2 * j - 1)
 
     def _cube_to_pano(self, i: float, j: float) -> Tuple[float, float]:
         x, y, z = self._cube_to_3d(i, j)
-        phi = torch.atan2(y, x)
-        rsin = torch.hypot(x, y)
-        theta = torch.atan2(z, rsin)
-        ox = 2 * theta / torch.pi
-        oy = phi / torch.pi
+        phi = np.atan2(y, x)
+        rsin = np.hypot(x, y)
+        theta = np.atan2(z, rsin)
+        ox = 2 * theta / np.pi
+        oy = phi / np.pi
         return ox, oy
 
     @torch.no_grad()

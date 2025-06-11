@@ -1,4 +1,4 @@
-from .pano_convert import PanoConverter
+from .pano_converter import PanoConverter
 
 __all__ = [
     PanoConverter,

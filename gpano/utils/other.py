@@ -1,3 +1,4 @@
+from collections import defaultdict
 from typing import *
 
 
@@ -17,3 +18,13 @@ def safe_index(obj: Any, indices: List[int], raise_on_error: bool = False) -> Op
             return None
         pobj = pobj[idx]
     return pobj
+
+
+def batchedby[T](iterable: Iterable[T], key: Callable[[T], Any], n: int) -> Iterator[List[T]]:
+    groups = defaultdict(list)
+    for x in iter(iterable):
+        k = key(x)
+        groups[k].append(x)
+        if len(groups[k]) == n:
+            yield groups.pop(k)
+    yield from groups.values()

@@ -101,7 +101,7 @@ async def load_panoramas(args: argparse.Namespace) -> None:
     finally:
         locations = list(itertools.compress(locations, selectors))
         with output.open("wb") as f:
-            f.write(orjson.dumps({"customCoordinates": locations}))
+            f.write(orjson.dumps(locations))
 
 
 def main() -> None:
