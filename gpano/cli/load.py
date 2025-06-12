@@ -16,10 +16,10 @@ from gpano.utils import get_first
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("input", type=str, help="input JSON with locations")
-    parser.add_argument("-d", "--directory", type=str, default=".", help="root dir for JSON and images dir")
-    parser.add_argument("--images-dir", type=str, default="panoramas", help="name of images dir inside root dir")
     parser.add_argument("-z", "--zoom", type=int, choices=[0, 1, 2, 3, 4, 5, 6], default=3, help="panorama zoom level")
-    parser.add_argument("--batch-size", type=int, default=8, help="max number of simultaneously processed locations")
+    parser.add_argument(
+        "-b", "--batch-size", type=int, default=8, help="max number of simultaneously processed locations"
+    )
     parser.add_argument("--conn-limit", type=int, default=64, help="max number of simultaneous TCP connections")
     parser.add_argument(
         "--conn-limit-per-host",
@@ -27,13 +27,15 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="max number of simultaneous TCP connections per host",
     )
-    parser.add_argument("-o", "--output", type=str, required=True, help="output JSON file name (relative to root dir)")
+    parser.add_argument("--json-filename", type=str, default="storage.json", help="name of output JSON")
+    parser.add_argument("--images-dir", type=str, default="panoramas", help="name of images directory")
+    parser.add_argument("-o", "--output-dir", type=str, required=True, help="output directory for JSON and images")
     parser.epilog = "every location must have either panoid or lat+lng for obtaining panoid"
     return parser.parse_args()
 
 
 async def process_location(
-    location: Any, root_dir: Path, images_dir: str, zoom: int, session: aiohttp.ClientSession
+    location: Any, storage_dir: Path, images_dir: str, zoom: int, session: aiohttp.ClientSession
 ) -> bool:
     try:
         # load location metadata
@@ -51,16 +53,17 @@ async def process_location(
                 location["metadata"] = await single_image_search(session, lat, lng)
 
         # load panorama
-        panoid = location["metadata"]["panoid"]
+        metadata = location["metadata"]
+        panoid = metadata["panoid"]
         rel_path = Path(images_dir) / panoid[0] / panoid[1] / f"{panoid}.jpg"
-        abs_path = root_dir / rel_path
-        if "panorama" not in location or not (root_dir / images_dir / location["panorama"]).exists():
+        abs_path = storage_dir / rel_path
+        if "panorama" not in location or not (storage_dir / location["panorama"]).exists():
             if not abs_path.exists():
                 pano = await get_pano(
                     session,
-                    location["metadata"]["panoid"],
-                    location["metadata"]["sizes"],
-                    location["metadata"]["tile_size"],
+                    metadata["panoid"],
+                    metadata["sizes"],
+                    metadata["tile_size"],
                     zoom,
                 )
                 abs_path.parent.mkdir(parents=True, exist_ok=True)
@@ -75,9 +78,7 @@ async def process_location(
 
 
 async def load_panoramas(args: argparse.Namespace) -> None:
-    root_dir = Path(args.directory)
-    root_dir.mkdir(parents=True, exist_ok=True)
-    output = root_dir / args.output
+    storage_dir = Path(args.output_dir)
 
     with open(args.input, "r", encoding="utf-8") as f:
         locations = orjson.loads(f.read())
@@ -93,14 +94,14 @@ async def load_panoramas(args: argparse.Namespace) -> None:
         ) as session:
             batches = itertools.batched(locations, args.batch_size)
             for i, loc_batch in enumerate(tqdm(batches, total=len(locations) // args.batch_size)):
-                tasks = [process_location(loc, root_dir, args.images_dir, args.zoom, session) for loc in loc_batch]
+                tasks = [process_location(loc, storage_dir, args.images_dir, args.zoom, session) for loc in loc_batch]
                 from_, to_ = i * args.batch_size, (i + 1) * args.batch_size
                 selectors[from_:to_] = await asyncio.gather(*tasks)
     except (KeyboardInterrupt, asyncio.exceptions.CancelledError):
         tqdm.write("interrupted, saving to JSON...")
     finally:
         locations = list(itertools.compress(locations, selectors))
-        with output.open("wb") as f:
+        with open(str(storage_dir / args.json_filename), "wb") as f:
             f.write(orjson.dumps(locations))
 
 

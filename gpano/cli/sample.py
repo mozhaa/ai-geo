@@ -4,10 +4,8 @@ from pathlib import Path
 import orjson
 import torch
 from PIL import Image
-from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 from tqdm import tqdm
 
-from gpano.transforms import PanoConverter
 from gpano.utils import batchedby
 
 
@@ -21,6 +19,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--phi", type=float, default=0, help="horizontal angle of camera ([-1, 1], 0=forward)")
     parser.add_argument("--theta", type=float, default=0, help="vertical angle of camera ([-1, 1], 0=forward)")
     parser.add_argument("--fov", type=float, default=0.5, help="FOV of camera ([0, 1], 1/2=pi/2)")
+    parser.add_argument("--json-filename", type=str, default="sample.json", help="name of output JSON")
+    parser.add_argument("--images-dir", type=str, default="images", help="name of images directory")
     parser.add_argument("-o", "--output", type=str, required=True, help="output directory")
     return parser.parse_args()
 
@@ -28,11 +28,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    output_root_dir = Path(args.output)
-    rel_img_dir = Path("images")
-    output_img_dir = output_root_dir / rel_img_dir
-    output_img_dir.mkdir(parents=True, exist_ok=True)
-    input_root_dir = Path(args.input).parent
+    sample_dir = Path(args.output)
+    storage_dir = Path(args.input).parent
 
     with open(args.input, "r", encoding="utf-8") as f:
         locations = orjson.loads(f.read())
@@ -44,7 +41,7 @@ def main() -> None:
     for location in locations:
         if "panorama" not in location:
             raise RuntimeError("found location without panorama in input JSON")
-        if not (input_root_dir / location["panorama"]).exists():
+        if not (storage_dir / location["panorama"]).exists():
             raise RuntimeError("found location with invalid panorama in input JSON (no such file)")
 
     out_locations = []
@@ -52,7 +49,13 @@ def main() -> None:
     if args.count is None:
         indices = list(range(len(locations)))
     else:
-        indices = torch.randint(0, len(locations), (args.count,)).tolist()
+        if args.count >= len(locations):
+            raise ValueError("--count should not be bigger than number of locations")
+        indices = torch.randperm(len(locations))[: args.count].tolist()
+
+    from torchvision.transforms.functional import pil_to_tensor, to_pil_image
+
+    from gpano.transforms import PanoConverter
 
     converter = PanoConverter(
         args.size,
@@ -64,32 +67,38 @@ def main() -> None:
     )
 
     opened_panoramas = map(
-        lambda i: (i, pil_to_tensor(Image.open(input_root_dir / locations[i]["panorama"])).float()), tqdm(indices)
+        lambda i: (i, pil_to_tensor(Image.open(storage_dir / locations[i]["panorama"])).float()), tqdm(indices)
     )
     batches = batchedby(opened_panoramas, key=lambda x: x[1].shape, n=args.batch_size)
 
     images_counter = 0
-    for batch in batches:
-        indices_batch, images = zip(*batch)
-        converted_images = converter.convert(torch.stack(images))
-        converted_images = map(lambda t: to_pil_image(t.to(torch.uint8)), converted_images)
 
-        for i, converted_image in zip(indices_batch, converted_images):
-            fn = f"{images_counter}.jpg"
-            images_counter += 1
-            converted_image.save(output_img_dir / fn)
+    try:
+        for batch in batches:
+            indices_batch, images = zip(*batch)
+            converted_images = converter.convert(torch.stack(images))
+            converted_images = map(lambda t: to_pil_image(t.to(torch.uint8)), converted_images)
 
-            metadata = locations[i]["metadata"]
-            out_locations.append(
-                {
-                    "lat": metadata["lat"],
-                    "lng": metadata["lng"],
-                    "image": str(rel_img_dir / fn),
-                }
-            )
+            for i, converted_image in zip(indices_batch, converted_images):
+                fn = Path(args.images_dir) / str(images_counter // 100) / f"{images_counter}.jpg"
+                images_counter += 1
 
-    with open(output_root_dir / "index.json", "wb") as f:
-        f.write(orjson.dumps(out_locations))
+                (sample_dir / fn).parent.mkdir(parents=True, exist_ok=True)
+                converted_image.save(sample_dir / fn)
+
+                metadata = locations[i]["metadata"]
+                out_locations.append(
+                    {
+                        "lat": metadata["lat"],
+                        "lng": metadata["lng"],
+                        "image": str(fn),
+                    }
+                )
+    except KeyboardInterrupt:
+        tqdm.write("interrupted, saving to JSON...")
+    finally:
+        with open(sample_dir / args.json_filename, "wb") as f:
+            f.write(orjson.dumps(out_locations))
 
 
 if __name__ == "__main__":
