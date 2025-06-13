@@ -21,6 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fov", type=float, default=0.5, help="FOV of camera ([0, 1], 1/2=pi/2)")
     parser.add_argument("--json-filename", type=str, default="sample.json", help="name of output JSON")
     parser.add_argument("--images-dir", type=str, default="images", help="name of images directory")
+    parser.add_argument("--append", action="store_true", help="append locations to output instead of overwriting")
     parser.add_argument("-o", "--output", type=str, required=True, help="output directory")
     return parser.parse_args()
 
@@ -30,6 +31,7 @@ def main() -> None:
 
     sample_dir = Path(args.output)
     storage_dir = Path(args.input).parent
+    output_json = sample_dir / args.json_filename
 
     with open(args.input, "r", encoding="utf-8") as f:
         locations = orjson.loads(f.read())
@@ -44,7 +46,11 @@ def main() -> None:
         if not (storage_dir / location["panorama"]).exists():
             raise RuntimeError("found location with invalid panorama in input JSON (no such file)")
 
-    out_locations = []
+    if args.append:
+        with open(output_json, "rb") as f:
+            out_locations = orjson.loads(f.read())
+    else:
+        out_locations = []
 
     if args.count is None:
         indices = list(range(len(locations)))
@@ -71,7 +77,7 @@ def main() -> None:
     )
     batches = batchedby(opened_panoramas, key=lambda x: x[1].shape, n=args.batch_size)
 
-    images_counter = 0
+    images_counter = len(out_locations)
 
     try:
         for batch in batches:
@@ -91,13 +97,13 @@ def main() -> None:
                     {
                         "lat": metadata["lat"],
                         "lng": metadata["lng"],
-                        "image": str(fn),
+                        "image": str(fn.as_posix()),
                     }
                 )
     except KeyboardInterrupt:
         tqdm.write("interrupted, saving to JSON...")
     finally:
-        with open(sample_dir / args.json_filename, "wb") as f:
+        with open(output_json, "wb") as f:
             f.write(orjson.dumps(out_locations))
 
 

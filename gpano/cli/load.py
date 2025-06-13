@@ -69,7 +69,7 @@ async def process_location(
                 abs_path.parent.mkdir(parents=True, exist_ok=True)
                 pano.save(abs_path)
 
-            location["panorama"] = str(rel_path)
+            location["panorama"] = str(rel_path.as_posix())
 
         return True
     except Exception:
