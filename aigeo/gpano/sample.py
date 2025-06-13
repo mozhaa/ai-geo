@@ -2,11 +2,10 @@ import argparse
 from pathlib import Path
 
 import orjson
-import torch
 from PIL import Image
 from tqdm import tqdm
 
-from gpano.utils import batchedby
+from aigeo.utils import batchedby
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,16 +51,16 @@ def main() -> None:
     else:
         out_locations = []
 
+    import torch
+    from torchvision.transforms.functional import pil_to_tensor, to_pil_image
+    from aigeo.transforms import PanoConverter
+
     if args.count is None:
         indices = list(range(len(locations)))
     else:
         if args.count >= len(locations):
             raise ValueError("--count should not be bigger than number of locations")
         indices = torch.randperm(len(locations))[: args.count].tolist()
-
-    from torchvision.transforms.functional import pil_to_tensor, to_pil_image
-
-    from gpano.transforms import PanoConverter
 
     converter = PanoConverter(
         args.size,

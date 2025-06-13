@@ -9,8 +9,8 @@ import aiohttp
 import orjson
 from tqdm import tqdm
 
-from gpano.google import get_metadata, get_pano, single_image_search
-from gpano.utils import get_first
+from aigeo.google import get_metadata, get_pano, single_image_search
+from aigeo.utils import get_first
 
 
 def parse_args() -> argparse.Namespace:
