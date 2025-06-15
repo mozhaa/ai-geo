@@ -7,7 +7,7 @@ import aiohttp
 import orjson
 from PIL import Image
 
-from gpano.utils import safe_index
+from aigeo.utils import safe_index
 
 
 async def single_image_search(

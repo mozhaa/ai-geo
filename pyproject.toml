@@ -3,10 +3,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "gpano"
+name = "aigeo"
 version = "1.0"
 requires-python = ">= 3.12"
-description = "CLI tools for downloading Google Street View panoramas"
+description = "Google Street View location guesser AI"
 readme = "README.md"
 dependencies = [
     "aiohttp",
@@ -17,14 +17,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-sampling = [
+torch = [
   "torch==2.6.0",
   "torchvision==0.21.0",
 ]
 
 [project.scripts]
-gpano-load = "gpano.cli.load:main"
-gpano-sample = "gpano.cli.sample:main"
+gpano-load = "aigeo.gpano.load:main"
+gpano-sample = "aigeo.gpano.sample:main"
+aigeo-inference = "aigeo.ai.inference:main"
 
-[tool.hatch.metadata]
-allow-direct-references = true
+# [tool.hatch.metadata]
+# allow-direct-references = true

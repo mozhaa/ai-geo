@@ -29,6 +29,7 @@ def main() -> None:
     args = parse_args()
 
     sample_dir = Path(args.output)
+    sample_dir.mkdir(parents=True, exist_ok=True)
     storage_dir = Path(args.input).parent
     output_json = sample_dir / args.json_filename
 
