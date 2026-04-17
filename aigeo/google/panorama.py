@@ -1,6 +1,6 @@
-import math
 import asyncio
 import itertools
+import math
 from typing import List, Tuple
 
 import aiohttp

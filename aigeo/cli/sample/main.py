@@ -53,7 +53,11 @@ def main(args: argparse.Namespace) -> None:
     )
 
     opened_panoramas = map(
-        lambda i: (i, pil_to_tensor(Image.open(storage_dir / locations[i]["panorama"])).float()), tqdm(indices)
+        lambda i: (
+            i,
+            pil_to_tensor(Image.open(storage_dir / locations[i]["panorama"])).float(),
+        ),
+        tqdm(indices),
     )
     batches = batchedby(opened_panoramas, key=lambda x: x[1].shape, n=args.batch_size)
 

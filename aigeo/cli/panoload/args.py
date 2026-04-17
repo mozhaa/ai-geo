@@ -38,4 +38,10 @@ def setup_parser(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--json-filename", type=str, default="storage.json", help="name of output JSON")
     parser.add_argument("--images-dir", type=str, default="panoramas", help="name of images directory")
-    parser.add_argument("-o", "--output-dir", type=str, required=True, help="output directory for JSON and images")
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        type=str,
+        required=True,
+        help="output directory for JSON and images",
+    )

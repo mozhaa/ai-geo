@@ -14,7 +14,11 @@ from aigeo.utils import get_first
 
 
 async def process_location(
-    location: Any, storage_dir: Path, images_dir: str, zoom: int, session: aiohttp.ClientSession
+    location: Any,
+    storage_dir: Path,
+    images_dir: str,
+    zoom: int,
+    session: aiohttp.ClientSession,
 ) -> Optional[bool]:
     try:
         # load location metadata
