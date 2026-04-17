@@ -1,8 +1,9 @@
 import argparse
 import asyncio
 import itertools
+import traceback
 from pathlib import Path
-from typing import *
+from typing import Any, Optional
 
 import aiohttp
 import orjson
@@ -14,7 +15,7 @@ from aigeo.utils import get_first
 
 async def process_location(
     location: Any, storage_dir: Path, images_dir: str, zoom: int, session: aiohttp.ClientSession
-) -> bool:
+) -> Optional[bool]:
     try:
         # load location metadata
         if "metadata" not in location:
@@ -33,7 +34,7 @@ async def process_location(
         # load panorama
         metadata = location["metadata"]
         panoid = metadata["panoid"]
-        rel_path = Path(images_dir) / f"{panoid}.jpg"
+        rel_path = Path(images_dir) / panoid[0] / panoid[1] / f"{panoid}.jpg"
         abs_path = storage_dir / rel_path
         if "panorama" not in location or not (storage_dir / location["panorama"]).exists():
             if not abs_path.exists():
@@ -50,8 +51,8 @@ async def process_location(
             location["panorama"] = str(rel_path.as_posix())
 
         return True
-    except Exception as e:
-        tqdm.write(f"[warning]: skipped location due to error: {e}")
+    except Exception:
+        tqdm.write(f"[warning]: skipped location due to error: {traceback.format_exc()}")
         return False
 
 
@@ -65,7 +66,7 @@ async def load_panoramas(args: argparse.Namespace) -> None:
             raise ValueError("unknown format of JSON file")
         locations = locations["customCoordinates"]
 
-    selectors = [True for _ in locations]
+    selectors: list[Optional[bool]] = [True for _ in locations]
     try:
         async with aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(limit=args.conn_limit, limit_per_host=args.conn_limit_per_host)

@@ -30,7 +30,7 @@ def main(args: argparse.Namespace) -> None:
         if not (storage_dir / location["panorama"]).exists():
             raise RuntimeError("found location with invalid panorama in input JSON (no such file)")
 
-    if args.append and output_json.exists():
+    if args.append:
         with open(output_json, "rb") as f:
             out_locations = orjson.loads(f.read())
     else:
