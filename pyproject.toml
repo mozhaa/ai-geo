@@ -23,9 +23,4 @@ torch = [
 ]
 
 [project.scripts]
-gpano-load = "aigeo.gpano.load:main"
-gpano-sample = "aigeo.gpano.sample:main"
-aigeo-inference = "aigeo.ai.inference:main"
-
-# [tool.hatch.metadata]
-# allow-direct-references = true
+aigeo = "aigeo.cli.__main__:main"
